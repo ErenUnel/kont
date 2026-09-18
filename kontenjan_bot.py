@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 # ================== AYARLAR ==================
 DERS_URL = "https://obs.itu.edu.tr/public/DersProgram/DersProgramSearch?programSeviyeTipiAnahtari=LS&dersBransKoduId=3"
 
-TAKIP_EDILEN_CRNLER = ["12575", "12576"]  # Computer Vision, Computer Security
+TAKIP_EDILEN_CRNLER = ["12575"]  # Computer Vision, Computer Security
 
 KONTROL_ARALIGI_SN = 60  # 60 sn'nin altına inme
 
