@@ -1,14 +1,15 @@
 """
 İTÜ OBS kontenjan takip botu (GitHub Actions uyumlu)
 - Belirlenen CRN'lerin kontenjanını ve yazılan sayısını dakikada bir kontrol eder
-- Kontenjan artarsa veya boş yer açılırsa:
-  * oto_kayit aktifse → OBS'ye giriş yapıp dersi otomatik kaydeder
+- Boş yer varsa:
+  * oto_kayit aktifse → OBS'ye giriş yapıp dersi otomatik kaydetmeyi dener
+    (başarısız olursa yer açık kaldığı sürece her turda tekrar dener)
   * değilse → sadece bildirim gönderir (ntfy veya Telegram)
 
 Gizli bilgiler ortam değişkeninden okunur:
-  NTFY_KONU, NTFY_KONU_SNT, NTFY_KONU_ATA  -> ntfy konu adları
-  TELEGRAM_TOKEN, TELEGRAM_CHAT_ID           -> Telegram için
-  OBS_KULLANICI, OBS_SIFRE                   -> otomatik kayıt için
+  NTFY_KONU                        -> ntfy konu adı
+  TELEGRAM_TOKEN, TELEGRAM_CHAT_ID -> Telegram için
+  OBS_KULLANICI, OBS_SIFRE         -> otomatik kayıt için
 """
 
 import os
@@ -59,13 +60,16 @@ HEADERS = {
 }
 TR_SAATI = timezone(timedelta(hours=3))
 
-# Başarıyla kaydedilen CRN'leri takip et (tekrar denememek için)
+# Başarıyla kaydedilen CRN'ler (tekrar denenmez)
 KAYDEDILEN_CRNLER = set()
+
+# Şifre yanlışsa otomatik kayıt bu çalışma boyunca kapatılır (hesap kilitlenmesin)
+oto_kayit_kapali = False
 
 
 def bildirim_gonder(mesaj: str, crn: str = "") -> None:
     """crn verilirse sadece o dersin konusuna, verilmezse tum konulara gonderir."""
-    print(f"[BİLDİRİM] {mesaj}")
+    print(f"[BİLDİRİM] {mesaj}", flush=True)
 
     if crn:
         konular = [TAKIP_CONFIG.get(crn, {}).get("ntfy", "")]
@@ -74,24 +78,28 @@ def bildirim_gonder(mesaj: str, crn: str = "") -> None:
             cfg["ntfy"] for cfg in TAKIP_CONFIG.values()
         ))
 
-    try:
-        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        try:
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
                 data={"chat_id": TELEGRAM_CHAT_ID, "text": mesaj},
                 timeout=15,
             )
-        for konu in konular:
-            if not konu:
-                continue
+        except requests.RequestException as e:
+            print(f"[!] Telegram bildirimi gönderilemedi: {e}")
+
+    for konu in konular:
+        if not konu:
+            continue
+        try:
             requests.post(
                 f"https://ntfy.sh/{konu}",
                 data=mesaj.encode("utf-8"),
                 headers={"Priority": "urgent", "Tags": "rotating_light"},
                 timeout=15,
             )
-    except requests.RequestException as e:
-        print(f"[!] Bildirim gönderilemedi: {e}")
+        except requests.RequestException as e:
+            print(f"[!] ntfy bildirimi gönderilemedi: {e}")
 
 
 def kontenjanlari_cek() -> dict:
@@ -116,52 +124,38 @@ def kontenjanlari_cek() -> dict:
     return sonuc
 
 
-def otomatik_kayit_dene(crn: str, ders_adi: str) -> None:
+def otomatik_kayit_dene(crn: str, ders_adi: str) -> str | None:
     """
-    Kontenjan açılan CRN için otomatik ders kaydı dener.
-    Sonucu bildirim olarak gönderir.
+    Kontenjan açık olan CRN için otomatik ders kaydı dener.
+    Bildirimde gösterilecek sonuç metnini döndürür; deneme yapılmadıysa None.
     """
-    if crn in KAYDEDILEN_CRNLER:
-        print(f"[OBS] {crn} zaten kaydedildi, tekrar denenmeyecek.")
-        return
+    global oto_kayit_kapali
 
-    config = TAKIP_CONFIG.get(crn, {})
-    if not config.get("oto_kayit", False):
-        return
+    if crn in KAYDEDILEN_CRNLER or oto_kayit_kapali:
+        return None
+    if not TAKIP_CONFIG.get(crn, {}).get("oto_kayit", False):
+        return None
 
     if not OBS_KULLANICI or not OBS_SIFRE:
-        bildirim_gonder(
-            f"⚠️ OTOMATİK KAYIT YAPILAMADI!\n{crn} {ders_adi}\n"
-            "Sebep: OBS_KULLANICI veya OBS_SIFRE tanımlı değil.\n"
-            "Elle kayıt yapmanız gerekiyor!",
-            crn,
-        )
-        return
-
-    bildirim_gonder(
-        f"⏳ Otomatik kayıt deneniyor...\n{crn} {ders_adi}",
-        crn,
-    )
+        return ("⚠️ Otomatik kayıt yapılamadı: OBS_KULLANICI veya OBS_SIFRE tanımlı değil.\n"
+                "Elle kayıt yapmanız gerekiyor!")
 
     sonuc = kayit_dene(OBS_KULLANICI, OBS_SIFRE, crn)
 
     if sonuc["basarili"]:
         KAYDEDILEN_CRNLER.add(crn)
-        bildirim_gonder(
-            f"✅ DERS KAYDEDİLDİ!\n{crn} {ders_adi}\n{sonuc['mesaj']}",
-            crn,
-        )
-    else:
-        bildirim_gonder(
-            f"❌ OTOMATİK KAYIT BAŞARISIZ!\n{crn} {ders_adi}\n"
-            f"Hata: {sonuc['mesaj']}\n"
-            "Elle kayıt yapmayı deneyin!",
-            crn,
-        )
+        return f"✅ DERS KAYDEDİLDİ!\n{sonuc['mesaj']}\n(OBS'den kontrol etmeyi unutma)"
+
+    if "Giriş başarısız" in sonuc["mesaj"]:
+        oto_kayit_kapali = True
+        return (f"❌ OBS girişi başarısız, otomatik kayıt bu çalışmada kapatıldı!\n"
+                f"{sonuc['mesaj']}\nOBS_KULLANICI / OBS_SIFRE secret'larını kontrol et.")
+
+    return (f"❌ Otomatik kayıt başarısız (yer açık kaldıkça tekrar denenecek)\n"
+            f"Hata: {sonuc['mesaj']}\nElle kayıt yapmayı deneyin!")
 
 
 def main() -> None:
-    # Başlangıç kontrolleri
     oto_kayit_var = any(cfg.get("oto_kayit") for cfg in TAKIP_CONFIG.values())
 
     for crn, cfg in TAKIP_CONFIG.items():
@@ -185,6 +179,7 @@ def main() -> None:
         bildirim_gonder(basla_mesaj)
 
     onceki = {}
+    son_kayit_mesaji = {}   # aynı hata mesajını her dakika tekrar göndermemek için
     ardisik_hata = 0
 
     while bitis is None or time.time() < bitis:
@@ -198,31 +193,32 @@ def main() -> None:
 
             for crn, (ad, kont, yaz) in veri.items():
                 print(f"[{zaman}] {crn} {ad}: {yaz}/{kont}", flush=True)
+                yer_var = yaz < kont
                 eski = onceki.get(crn)
 
+                olay = None
                 if eski:
                     _, eski_kont, eski_yaz = eski
                     if kont > eski_kont:
-                        # KONTENJAN ARTTI
-                        bildirim_gonder(
-                            f"🚨 KONTENJAN ARTTI!\n{crn} {ad}\n"
-                            f"{eski_kont} → {kont} (yazılan: {yaz})",
-                            crn,
-                        )
-                        if yaz < kont:
-                            otomatik_kayit_dene(crn, ad)
+                        olay = (f"🚨 KONTENJAN ARTTI!\n{crn} {ad}\n"
+                                f"{eski_kont} → {kont} (yazılan: {yaz})")
+                    elif yer_var and not (eski_yaz < eski_kont):
+                        olay = f"🟢 BOŞ YER AÇILDI!\n{crn} {ad}\nDurum: {yaz}/{kont}"
+                elif yer_var:
+                    olay = f"🟢 Şu an yer var: {crn} {ad} ({yaz}/{kont})"
 
-                    elif yaz < kont and not (eski_yaz < eski_kont):
-                        # BOŞ YER AÇILDI (biri dersi bıraktı)
-                        bildirim_gonder(
-                            f"🟢 BOŞ YER AÇILDI!\n{crn} {ad}\nDurum: {yaz}/{kont}", crn
-                        )
-                        otomatik_kayit_dene(crn, ad)
+                # Yer açıksa önce kaydı dene (hız önemli), sonra tek bildirim gönder
+                kayit_mesaji = otomatik_kayit_dene(crn, ad) if yer_var else None
+                if not yer_var:
+                    son_kayit_mesaji.pop(crn, None)
 
-                elif yaz < kont:
-                    bildirim_gonder(f"🟢 Şu an yer var: {crn} {ad} ({yaz}/{kont})", crn)
-                    otomatik_kayit_dene(crn, ad)
+                if olay:
+                    bildirim_gonder(olay + (f"\n\n{kayit_mesaji}" if kayit_mesaji else ""), crn)
+                elif kayit_mesaji and kayit_mesaji != son_kayit_mesaji.get(crn):
+                    bildirim_gonder(f"{crn} {ad} ({yaz}/{kont})\n{kayit_mesaji}", crn)
 
+                if kayit_mesaji:
+                    son_kayit_mesaji[crn] = kayit_mesaji
                 onceki[crn] = (ad, kont, yaz)
 
         except Exception as e:
