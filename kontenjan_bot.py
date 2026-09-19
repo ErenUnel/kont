@@ -22,14 +22,16 @@ TEMEL_URL = "https://obs.itu.edu.tr/public/DersProgram/DersProgramSearch?program
 # Taranacak ders listeleri (URL'nin sonundaki numara ders kodunu belirler)
 DERS_URLLERI = [
     TEMEL_URL + "3",              # BLG
-    TEMEL_URL + "193",   # SNT  <-- buraya SNT'nin numarasini yaz
+    TEMEL_URL + "193",            # SNT
+    TEMEL_URL + "226",            # FRA
 ]
 
 # Hangi ders hangi ntfy konusuna bildirim gondersin
 # (konu adlari GitHub Secrets'tan geliyor)
 KANALLAR = {
-    "12575": os.getenv("NTFY_KONU", ""),        # Computer Vision  -> senin konun
-    "10729": os.getenv("NTFY_KONU_SNT", ""),    # Sinema Sanati    -> arkadasinin konusu
+    "12575": os.getenv("NTFY_KONU", ""),        # Computer Vision -> senin konun
+    "10729": os.getenv("NTFY_KONU_SNT", ""),    # Sinema Sanatı   -> arkadaşının konusu
+    "10683": os.getenv("NTFY_KONU_SNT", ""),    # French I        -> arkadaşının konusu
 }
 
 TAKIP_EDILEN_CRNLER = list(KANALLAR)
