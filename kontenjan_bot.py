@@ -31,7 +31,6 @@ KANALLAR = {
     "12575": os.getenv("NTFY_KONU", ""),        # Computer Vision  -> senin konun
     "10729": os.getenv("NTFY_KONU_SNT", ""),    # Sinema Sanatı
     "10683": os.getenv("NTFY_KONU_SNT", ""),    # French I
-    "10755": os.getenv("NTFY_KONU_ATA", ""),    # SNT 211E
     "14638": os.getenv("NTFY_KONU_ATA", ""),    # SNT 211E
     "10134": os.getenv("NTFY_KONU_ATA", ""),    # ATA -> yeni kanal
 }
