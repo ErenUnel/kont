@@ -29,6 +29,7 @@ jobs:
         env:
           CALISMA_SURESI_DK: "330"   # 5,5 saat çalış
           NTFY_KONU: ${{ secrets.NTFY_KONU }}
+          NTFY_KONU_SNT: ${{ secrets.NTFY_KONU_SNT }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
