@@ -24,7 +24,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests beautifulsoup4
-      - run: python kontenjan_bot.py
+
+      - name: Baslangic zamanini kaydet
+        run: echo "BOT_BASLANGIC=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Botu calistir
+        run: python kontenjan_bot.py
         continue-on-error: true
         env:
           CALISMA_SURESI_DK: "330"   # 5,5 saat çalış
@@ -36,8 +41,16 @@ jobs:
 
       # Zincir: bitince bir sonraki çalışmayı kendisi başlatır
       # (Elle "Cancel" edersen zincir durur)
+      # Bot 5 dakikadan kısa sürede kapandıysa (çökme) zinciri durdurur ki
+      # saniyeler içinde sonsuz çalışma döngüsü oluşmasın; 30 dk'lık cron yeniden dener.
       - name: Sonraki calismayi baslat
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run kontenjan.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
+        run: |
+          GECEN=$(( $(date +%s) - BOT_BASLANGIC ))
+          if [ "$GECEN" -lt 300 ]; then
+            echo "::error::Bot ${GECEN} sn içinde kapandı (muhtemelen çöktü). Zincir durduruldu, 'Botu calistir' adımının loguna bak."
+            exit 1
+          fi
+          gh workflow run kontenjan.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
