@@ -29,10 +29,10 @@ jobs:
         env:
           CALISMA_SURESI_DK: "330"   # 5,5 saat çalış
           NTFY_KONU: ${{ secrets.NTFY_KONU }}
-          NTFY_KONU_SNT: ${{ secrets.NTFY_KONU_SNT }}
-          NTFY_KONU_ATA: ${{ secrets.NTFY_KONU_ATA }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OBS_KULLANICI: ${{ secrets.OBS_KULLANICI }}
+          OBS_SIFRE: ${{ secrets.OBS_SIFRE }}
 
       # Zincir: bitince bir sonraki çalışmayı kendisi başlatır
       # (Elle "Cancel" edersen zincir durur)
